@@ -1,0 +1,17 @@
+# Virtual environments
+openvino_env/
+openvino_env_new/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Downloaded models and data
+models/
+data/

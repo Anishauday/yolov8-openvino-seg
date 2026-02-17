@@ -1,0 +1,20 @@
+# YOLOv8 OpenVINO Instance Segmentation Demo
+# Install: pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+# Jupyter
+jupyterlab
+ipywidgets
+ipykernel==6.31.0
+ipython>=7.16.3
+
+# OpenVINO & YOLOv8
+openvino>=2024.0.0
+nncf>=2.9.0
+torch>=2.1
+torchvision>=0.16
+ultralytics>=8.3.0
+opencv-python>=4.8.0
+matplotlib>=3.7.0
+pandas>=2.0.0
+tqdm
+requests
