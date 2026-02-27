@@ -1,0 +1,10 @@
+# Copy-paste these commands to run the installer (Linux)
+# The sed line fixes Windows CRLF line endings if the script was edited on Windows.
+
+mkdir -p ~/work
+cd ~/work
+git clone https://github.com/openvinotoolkit/openvino_build_deploy.git
+cd openvino_build_deploy/trainings
+sed -i 's/\r$//' install_linux.sh
+chmod +x install_linux.sh
+./install_linux.sh
