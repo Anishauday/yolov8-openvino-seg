@@ -1,6 +1,5 @@
-# Before running this, create a virtual environment and activate it
-# python -m venv env_ov
-# env_ov\Scripts\activate
+# Run with venv active: env_ov\Scripts\Activate.ps1 (Windows)
+# First time: python -m venv env_ov
 
 import os
 

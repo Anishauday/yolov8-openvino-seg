@@ -21,7 +21,7 @@ output_layer = 0
 no_filter = False
 _processing_times = collections.deque(maxlen=200)
 
-style_options = ["mosaic", "rain-princess", "candy", "udnie", "pointilism", "No filter"]
+style_options = ["No filter", "mosaic", "rain-princess", "candy", "udnie", "pointilism"]
 
 
 def load_models(model_list, device_list):
@@ -189,6 +189,12 @@ def cleanup():
     stop_processing = False
 
 
+def do_cleanup():
+    """Called by Clear button. Stops video and returns status."""
+    cleanup()
+    return "Stopped"
+
+
 def build_gr_interface():
     global compiled_model_dict
     compiled_model_dict = load_models(style_options, core.available_devices)
@@ -222,10 +228,6 @@ def build_gr_interface():
             inputs=[style_dd, device_dd, use_webcam],
             outputs=status,
         )
-
-        def do_cleanup():
-            cleanup()
-            return "Stopped"
 
         clear_btn.click(fn=do_cleanup, inputs=None, outputs=status)
 
