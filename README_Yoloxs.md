@@ -113,3 +113,4 @@ jupyter notebook notebooks\yolox-optimization\yolox-object-detection.ipynb
 | `ModuleNotFoundError: utils` | Run the notebook from `notebooks/yolox-optimization` so `utils/` is on the path |
 | OpenVINO GPU not found | Install GPU drivers and OpenVINO GPU plugin; fallback to CPU is automatic |
 | Gradio webcam fails | Ensure browser has camera permission; try HTTPS or `localhost` |
+
