@@ -1,96 +1,79 @@
-# YOLOv8 Instance Segmentation with OpenVINO
+# MobileNetV3-Large Image Classification with OpenVINO
 
-A standalone demo for running YOLOv8 instance segmentation using the [OpenVINO™ Toolkit](https://docs.openvino.ai/) for optimized inference. Based on [OpenVINO Notebooks](https://github.com/openvinotoolkit/openvino_notebooks).
-
-## Features
-
-- Convert YOLOv8-seg PyTorch model to OpenVINO IR (FP32/FP16)
-- Optional INT8 quantization via NNCF for smaller, faster models
-- Live webcam/video inference
-- Benchmark comparison (PyTorch vs OpenVINO FP32 vs OpenVINO INT8)
+Image classification using MobileNetV3-Large and OpenVINO 2026. Classifies images into 1000 ImageNet classes. Supports NNCF INT8 quantization (skipped if quantized model already exists).
 
 ## Prerequisites
 
-- **Python** 3.10–3.13 (64-bit)
-- **Git** (for cloning)
-
-### Linux (Ubuntu/Debian)
-
-```bash
-sudo apt-get install -y python3-venv python3-dev libgl1-mesa-dev ffmpeg
-```
+- Python 3.9+
+- OpenVINO 2026.0+
+- NNCF 2.19+
 
 ## Quick Start
 
+### 1. Create and activate a virtual environment
+
+**Linux / macOS**
+
 ```bash
-git clone https://github.com/YOUR_USERNAME/yolov8-openvino-seg-demo.git
-cd yolov8-openvino-seg-demo
+cd notebooks/mobilenetv3-classification
+python -m venv .venv
+source .venv/bin/activate
 ```
 
-### Windows
+**Windows (Command Prompt)**
+
+```cmd
+cd notebooks\mobilenetv3-classification
+python -m venv .venv
+.venv\Scripts\activate.bat
+```
+
+**Windows (PowerShell)**
 
 ```powershell
-.\run_yolov8_seg_demo.ps1
+cd notebooks\mobilenetv3-classification
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 ```
 
-### Linux
+### 2. Install dependencies
 
 ```bash
-chmod +x run_yolov8_seg_demo.sh
-./run_yolov8_seg_demo.sh
+pip install "openvino>=2026.0.0" "nncf>=2.19.0"
+pip install "torch>=2.8" "torchvision>=0.16" onnx tqdm opencv-python gradio matplotlib ipywidgets
 ```
 
-The script creates a virtual environment, installs dependencies, and launches Jupyter Lab with the ISV demo notebook.
+### 3. Run the notebook
 
-## Notebooks
-
-| Notebook | Description |
-|----------|-------------|
-| `yolov8_seg_isv_demo.ipynb` | Full ISV demo: conversion, benchmark, quantization, validation, live inference |
-| `yolov8_seg_comparison_demo.ipynb` | Comparison view: side-by-side PyTorch, FP32, INT8; live demos |
-
-## Options
-
-### Rebuild environment
+**Linux / macOS**
 
 ```bash
-# Windows
-.\run_yolov8_seg_demo.ps1 -Rebuild
-
-# Linux
-./run_yolov8_seg_demo.sh --rebuild
+jupyter notebook mobilenet-classification.ipynb
 ```
 
-### Custom port
+**Windows**
 
-```bash
-# Windows
-.\run_yolov8_seg_demo.ps1 -Port 8889
-
-# Linux
-./run_yolov8_seg_demo.sh --port 8889
+```cmd
+jupyter notebook mobilenet-classification.ipynb
 ```
 
-### Remote access (Linux)
+## Notebook Structure
 
-For SSH or remote access:
+1. **Setup** – Install OpenVINO, NNCF, and dependencies
+2. **Model Acquisition** – Convert PyTorch MobileNetV3-Large to OpenVINO IR
+3. **Inference Utilities** – ImageNet preprocessing, top-k, visualization
+4. **Load OpenVINO Model** – Compile for CPU/GPU
+5. **Run Inference** – Test on sample image with class label on image
+6. **NNCF Quantization** – INT8 PTQ (only if `mobilenet_v3_large_int8.xml` does not exist)
+7. **Gradio Demo** – Upload, webcam, sample image; classification label drawn on result
 
-```bash
-./run_yolov8_seg_demo.sh --ip 0.0.0.0
-```
+## Quantization Logic
 
-Then on your local machine:
+- If `model/mobilenet_v3_large/mobilenet_v3_large_int8.xml` exists: loads it and skips NNCF.
+- If not: runs NNCF PTQ, saves the model, then uses it.
+- The Gradio demo uses the quantized model when available (faster inference).
 
-```bash
-ssh -L 8888:localhost:8888 user@your-linux-host
-```
+## Platform Notes
 
-Open `http://localhost:8888` in your browser.
-
-### Headless Linux (no display)
-
-If running on a server without a display, use `use_popup=False` in the live demo cell so frames render in the browser instead of an OpenCV window.
-
-## License
-
-Apache 2.0 — see [OpenVINO Notebooks](https://github.com/openvinotoolkit/openvino_notebooks) for reference.
+- **Paths**: Uses `pathlib.Path` for cross-platform compatibility.
+- **ImageNet labels**: Loaded from PyTorch tutorials (requires internet on first run).
