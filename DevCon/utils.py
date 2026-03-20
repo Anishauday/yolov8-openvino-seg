@@ -55,6 +55,68 @@ def get_available_devices():
     return ov.Core().available_devices
 
 
+# --- ATSS person-vehicle-bike (OMZ) ---
+
+ATSS_OMZ_MODEL = "person-vehicle-bike-detection-2003"
+
+
+def _atss_model_exists(output_dir):
+    """Check if person-vehicle-bike-detection-2003 FP32/FP16 IR exists."""
+    base = os.path.join(output_dir, "intel", ATSS_OMZ_MODEL)
+    for prec in ("FP32", "FP16"):
+        xml = os.path.join(base, prec, f"{ATSS_OMZ_MODEL}.xml")
+        if not os.path.exists(xml):
+            return False
+    return True
+
+
+def download_person_vehicle_bike(output_dir="models"):
+    """Download and convert person-vehicle-bike-detection-2003 (ATSS+MobileNetV2) to FP32/FP16.
+    Skips if model already exists."""
+    if _atss_model_exists(output_dir):
+        return output_dir
+    subprocess.run(
+        ["omz_downloader", "--name", ATSS_OMZ_MODEL, "-o", output_dir],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "omz_converter",
+            "--name", ATSS_OMZ_MODEL,
+            "--precisions", "FP32,FP16",
+            "-d", output_dir,
+            "-o", output_dir,
+        ],
+        check=True,
+    )
+    return output_dir
+
+
+def load_atss_model(model_dir, precision, device="CPU"):
+    """Load person-vehicle-bike-detection-2003 IR and compile. precision: FP32, FP16, or INT8 (-> FP16-INT8)."""
+    import openvino as ov
+    prec_dir = "FP16-INT8" if precision == "INT8" else precision
+    base = os.path.join(model_dir, "intel", ATSS_OMZ_MODEL, prec_dir)
+    xml_path = os.path.join(base, f"{ATSS_OMZ_MODEL}.xml")
+    xml_path = os.path.normpath(os.path.abspath(xml_path))
+    if not os.path.exists(xml_path):
+        raise FileNotFoundError(f"ATSS model not found: {xml_path}. Run download cell first.")
+    core = ov.Core()
+    model = core.read_model(xml_path)
+    return core.compile_model(model, device), xml_path
+
+
+def run_detection_atss(compiled, image, input_shape, target_classes=(0, 1), thresh=0.3):
+    """Run ATSS inference. Returns (boxes, labels, input_tensor).
+    target_classes: 0=vehicle, 1=person, 2=bike; default (0,1)=vehicle+person."""
+    orig_h, orig_w = image.shape[:2]
+    input_tensor = preprocess_image(image, input_shape)
+    output = compiled([input_tensor])
+    _, _, input_h, input_w = input_shape
+    boxes = postprocess(output, orig_h, orig_w, input_h, input_w, "atss", thresh)
+    return boxes, [], input_tensor
+
+
 # --- YOLOX (yolox_s, yolox_l) ---
 
 def _yolox_model_exists(output_dir, model_name):
@@ -406,7 +468,9 @@ def postprocess(output, orig_h, orig_w, input_h, input_w, model_name, thresh=0.5
             boxes.append([int(x1), int(y1), int(x2), int(y2)])
     # ATSS/Deim boxes (N,5): [x_min, y_min, x_max, y_max, conf] or [cx, cy, w, h, conf] for DETR-based.
     elif arr.shape[-1] in (5, 6):
-        use_label_filter = labels_arr is not None and np.any(labels_arr > 0)
+        # ATSS person-vehicle-bike: 0=vehicle, 1=person, 2=bike (no background). Other ATSS: label 0=background.
+        atss_pvb = "atss" in model_name.lower() or "person-vehicle-bike" in model_name.lower()
+        use_label_filter = labels_arr is not None and np.any(labels_arr > 0) and not atss_pvb
         # Deim-DFine-X (DETR-based) outputs [cx, cy, w, h, conf]; convert to corner format
         use_center_format = "deim" in model_name.lower() or "dfine" in model_name.lower()
         for i, det in enumerate(arr):
