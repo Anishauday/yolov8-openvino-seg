@@ -49,10 +49,14 @@ def download_ssdlite_mobilenet_v2(output_dir="models_test"):
     return output_dir
 
 
-def get_available_devices():
-    """Return list of available OpenVINO devices (e.g. ['CPU', 'GPU'])."""
+def get_available_devices(exclude=None):
+    """Return list of available OpenVINO devices (e.g. ['CPU', 'GPU']).
+    exclude: list of device names to filter out (e.g. ['NPU'] for models that don't support it)."""
     import openvino as ov
-    return ov.Core().available_devices
+    devs = list(ov.Core().available_devices)
+    if exclude:
+        devs = [d for d in devs if d.upper() not in {e.upper() for e in exclude}]
+    return devs
 
 
 # --- ATSS person-vehicle-bike (OMZ) ---
@@ -93,7 +97,8 @@ def download_person_vehicle_bike(output_dir="models"):
 
 
 def load_atss_model(model_dir, precision, device="CPU"):
-    """Load person-vehicle-bike-detection-2003 IR and compile. precision: FP32, FP16, or INT8 (-> FP16-INT8)."""
+    """Load person-vehicle-bike-detection-2003 IR and compile. precision: FP32, FP16, or INT8 (-> FP16-INT8).
+    Note: Intel NPU does not support this model (internal dynamic ops); use CPU or GPU."""
     import openvino as ov
     prec_dir = "FP16-INT8" if precision == "INT8" else precision
     base = os.path.join(model_dir, "intel", ATSS_OMZ_MODEL, prec_dir)
@@ -101,6 +106,11 @@ def load_atss_model(model_dir, precision, device="CPU"):
     xml_path = os.path.normpath(os.path.abspath(xml_path))
     if not os.path.exists(xml_path):
         raise FileNotFoundError(f"ATSS model not found: {xml_path}. Run download cell first.")
+    if device.upper() == "NPU":
+        raise RuntimeError(
+            "ATSS person-vehicle-bike-detection-2003 is not supported on Intel NPU "
+            "(internal dynamic ops). Use CPU or GPU for this model."
+        )
     core = ov.Core()
     model = core.read_model(xml_path)
     return core.compile_model(model, device), xml_path
@@ -431,8 +441,7 @@ def run_inference(compiled_model, input_tensor):
 def postprocess(output, orig_h, orig_w, input_h, input_w, model_name, thresh=0.5):
     """Model-specific postprocessing. Supports:
     - DetectionOutput (1,1,N,7): [batch_id, class_id, conf, x_min, y_min, x_max, y_max], coords normalized 0-1
-    - ATSS boxes (N,5): [x_min, y_min, x_max, y_max, conf], coords in input resolution
-    - Deim-DFine-X: same as DetectionOutput if NMS in model, else boxes+scores."""
+    - ATSS boxes (N,5): [x_min, y_min, x_max, y_max, conf], coords in input resolution."""
     # Find boxes and labels tensors (ATSS: boxes + labels, label 0 = background)
     # OpenVINO output keys can be ConstOutput objects, not strings
     def _key_name(k):
@@ -466,13 +475,12 @@ def postprocess(output, orig_h, orig_w, input_h, input_w, model_name, thresh=0.5
             if max(x1, y1, x2, y2) <= 1.0:
                 x1, y1, x2, y2 = x1 * orig_w, y1 * orig_h, x2 * orig_w, y2 * orig_h
             boxes.append([int(x1), int(y1), int(x2), int(y2)])
-    # ATSS/Deim boxes (N,5): [x_min, y_min, x_max, y_max, conf] or [cx, cy, w, h, conf] for DETR-based.
+    # ATSS boxes (N,5): [x_min, y_min, x_max, y_max, conf], coords in input resolution
     elif arr.shape[-1] in (5, 6):
         # ATSS person-vehicle-bike: 0=vehicle, 1=person, 2=bike (no background). Other ATSS: label 0=background.
         atss_pvb = "atss" in model_name.lower() or "person-vehicle-bike" in model_name.lower()
         use_label_filter = labels_arr is not None and np.any(labels_arr > 0) and not atss_pvb
-        # Deim-DFine-X (DETR-based) outputs [cx, cy, w, h, conf]; convert to corner format
-        use_center_format = "deim" in model_name.lower() or "dfine" in model_name.lower()
+        use_center_format = False
         for i, det in enumerate(arr):
             if use_label_filter and i < len(labels_arr) and int(labels_arr[i]) <= 0:
                 continue
@@ -525,7 +533,7 @@ def check_device_latency(device, latency_ms, model_name="yolox_s"):
 
 def benchmark_latency_ms(compiled_model, input_tensor, num_iter=100):
     """Single-image inference; return average latency in ms."""
-    for _ in range(10):
+    for _ in range(20):
         compiled_model(input_tensor)
     times = []
     for _ in range(num_iter):
