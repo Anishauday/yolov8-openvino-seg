@@ -1,0 +1,11 @@
+# Core
+openvino>=2024.3.0
+numpy>=1.26.0
+opencv-python>=4.8.0
+matplotlib>=3.5.0
+gradio>=4.0
+
+# For notebook (fixes tqdm IProgress warning)
+ipywidgets>=8.0.0
+# For video-to-GIF fallback (when AVI doesn't play in browser)
+Pillow>=9.0.0
