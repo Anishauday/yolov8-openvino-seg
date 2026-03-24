@@ -1,0 +1,15 @@
+# Core
+openvino>=2024.3.0
+numpy>=1.26.0
+opencv-python>=4.8.0
+matplotlib>=3.5.0
+gradio>=4.0
+
+# Notebook & Jupyter
+jupyter>=1.0.0
+jupyterlab>=4.0.0
+ipykernel>=6.0.0
+ipywidgets>=8.0.0
+
+# Video display (GIF fallback)
+Pillow>=9.0.0
