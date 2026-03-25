@@ -296,17 +296,110 @@ def run_detect_and_classify_video(det_compiled, cls_compiled, video_path, output
     return output_path, frame_count, fps
 
 
+def _find_deployment_base_bfs(start_dir, max_depth=4, max_dirs=600):
+    """
+    Breadth-first search from start_dir for a directory D where D/models has valid IR.
+    Does not assume any fixed folder name (e.g. not tied to 'Final').
+    """
+    from collections import deque
+
+    start_dir = os.path.abspath(os.path.expanduser(start_dir))
+    q = deque([(start_dir, 0)])
+    seen = set()
+    while q and len(seen) < max_dirs:
+        d, depth = q.popleft()
+        if d in seen:
+            continue
+        seen.add(d)
+        if get_available_model_precisions(os.path.join(d, "models")):
+            return d
+        if depth >= max_depth:
+            continue
+        try:
+            for name in sorted(os.listdir(d)):
+                sub = os.path.join(d, name)
+                if os.path.isdir(sub):
+                    q.append((sub, depth + 1))
+        except OSError:
+            pass
+    return None
+
+
+def resolve_deployment_base_dir(start=None):
+    """
+    Find the directory that contains models/, media/, output/ — by **discovering** a valid
+    ``models/`` tree (IR with Detection + Classification), not by hardcoding a release folder name.
+
+    Resolution order:
+    1. ``OV_DEPLOY_BASE`` or ``GETI_DEPLOY_BASE`` if set (explicit override).
+    2. Walk **upward** from ``start`` (default: cwd): at each ancestor, check ``<dir>/models``
+       and each **immediate** subfolder ``<dir>/<anything>/models``.
+    3. **Bounded BFS** from cwd (depth ≤ 4): first directory whose ``models/`` validates wins
+       (handles deeper nesting or renamed folders like ``Final`` → ``Release``).
+    4. Legacy: ``cwd`` if basename is ``1``, else ``cwd/1``, only if that has valid ``models/``.
+
+    Raises FileNotFoundError if nothing is found.
+    """
+    env = (os.environ.get("OV_DEPLOY_BASE") or os.environ.get("GETI_DEPLOY_BASE") or "").strip()
+    if env:
+        return os.path.abspath(os.path.expanduser(env))
+
+    start_path = os.path.abspath(os.path.expanduser(start or os.getcwd()))
+    p = start_path
+    for _ in range(14):
+        models_here = os.path.join(p, "models")
+        if get_available_model_precisions(models_here):
+            return p
+        try:
+            for name in sorted(os.listdir(p)):
+                sub = os.path.join(p, name)
+                if not os.path.isdir(sub):
+                    continue
+                models_sub = os.path.join(sub, "models")
+                if get_available_model_precisions(models_sub):
+                    return sub
+        except OSError:
+            pass
+        parent = os.path.dirname(p)
+        if parent == p:
+            break
+        p = parent
+
+    found = _find_deployment_base_bfs(start_path)
+    if found:
+        return found
+
+    legacy = start_path if os.path.basename(start_path) == "1" else os.path.join(start_path, "1")
+    if get_available_model_precisions(os.path.join(legacy, "models")):
+        return legacy
+
+    raise FileNotFoundError(
+        "Could not find deployment assets (models/<PRECISION>/Detection/model.xml). "
+        "Expected a folder containing models/ with IR trees. Optional override:\n"
+        "  export OV_DEPLOY_BASE=/path/to/parent/of/models\n"
+        f"(walked up from {start_path}, then BFS under cwd; legacy {legacy} also missing models.)"
+    )
+
+
 def get_notebook_config(base_dir=None):
     """
     Return config dict for notebook: BASE, paths, precisions, devices, defaults, THRESH.
-    base_dir: folder containing models/, media/, output/. If None, infer from cwd.
+    base_dir: folder containing models/, media/, output/. If None, use resolve_deployment_base_dir().
     """
     if base_dir is None:
-        base_dir = os.getcwd() if os.path.basename(os.getcwd()) == "1" else os.path.join(os.getcwd(), "1")
+        base_dir = resolve_deployment_base_dir()
+    else:
+        base_dir = os.path.abspath(os.path.expanduser(base_dir))
     models_dir = os.path.join(base_dir, "models")
     precisions = get_available_model_precisions(models_dir)
+    if not precisions:
+        raise FileNotFoundError(
+            f"No model IR found under {models_dir}. "
+            "Expected models/<INT8|FP16|FP32>/Detection/model.xml and .../Classification/model.xml. "
+            "Set OV_DEPLOY_BASE to the correct deployment root or pass base_dir= to get_notebook_config()."
+        )
     devices = get_available_devices()
-    default_precision = precisions[0] if precisions else "INT8"
+    default_precision = precisions[0]
     default_device = "CPU" if "CPU" in devices else (devices[0] if devices else "CPU")
     samples = get_sample_images(os.path.join(base_dir, "media"))
     image_path = os.path.join(base_dir, "media", "sample_image.jpg")
@@ -365,6 +458,9 @@ def show_openvino_config_widgets(base_dir=None, auto_apply=True):
     """
     Jupyter: precision + device dropdowns and Apply in one row; loads models and sets OV_PRECISION / OV_DEVICE.
     Call get_notebook_session() in later cells for compiled models and labels.
+
+    For a fixed layout when the notebook is not next to ``models/``, set ``OV_DEPLOY_BASE`` to the folder
+    that contains ``models``, ``media``, and ``output``, or pass ``base_dir`` explicitly.
     """
     global _notebook_session
     try:
